@@ -127,7 +127,9 @@ autoplot(stack_blend, type = "weights")  # blending coefficients at selected pen
 # is the OOF roc_auc at the best-performing penalty — not a separate outer 5-fold
 # CV of the full stacked pipeline. mean / std_err / n match other *_cv_metrics
 # tables so analysis.qmd can row-bind it.
-stack_cv_metrics <- collect_metrics(stack_blend) |>
+# collect_metrics() has no method for <linear_stack>; $metrics is the same tibble
+# autoplot(stack_blend) uses internally (columns: penalty, .metric, mean, n, std_err).
+stack_cv_metrics <- stack_blend$metrics |>
   dplyr::filter(.metric == "roc_auc") |>
   dplyr::arrange(desc(mean)) |>
   dplyr::slice(1) |>
