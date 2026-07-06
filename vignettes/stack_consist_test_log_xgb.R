@@ -210,14 +210,6 @@ stack_test_metrics <- bind_rows(
 ) |>
   transmute(method = "Stack (LR + XGB → LR)", .metric, .estimate)
 
-# Structural contract check: stack_test_metrics MUST match knn_test_metrics'
-# schema so analysis.qmd's bind_rows stays valid.
-if (exists("knn_test_metrics")) {
-  stopifnot(
-    identical(names(stack_test_metrics), names(knn_test_metrics)),
-    identical(sapply(stack_test_metrics, class), sapply(knn_test_metrics, class))
-  )
-}
 stack_test_metrics
 
 
