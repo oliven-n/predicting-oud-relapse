@@ -235,6 +235,112 @@ relapse_pred_stack_test |>
   ggplot2::theme_minimal() +
   ggplot2::theme(legend.title = element_blank())
 
+# Experiment --------
+# Does adding logistic regression as a level-1 candidate change the stacked
+# ensemble's test ROC AUC relative to XGBoost alone?
+#
+# Method: vary the random seed (controls train/test split + CV fold assignment)
+# across 20 values. For each seed, build two stacks on a fresh 75/25 split:
+#   Condition A: LR + XGB → LASSO
+#   Condition B: XGB only → LASSO
+# Both conditions share the same seed, same splits, and same XGB resamples,
+# so a paired t-test isolates the effect of adding LR.
+#
+# Expected result: NOT significantly different (p > 0.05). XGBoost already
+# captures any linear signal logistic finds; LASSO is expected to zero out or
+# near-zero the logistic member. A significant result would be concerning —
+# it would suggest logistic is destabilizing rather than improving the ensemble.
+
+stack_experiment_cache <- here::here("vignettes/stack_experiment_results.rds")
+
+if (file.exists(stack_experiment_cache)) {
+  sens_results <- readRDS(stack_experiment_cache)
+} else {
+  seeds <- c(1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L, 9L, 10L,
+             111L, 222L, 333L, 444L, 555L, 666L, 777L, 888L, 999L, 12345L)
+
+  n_seeds       <- length(seeds)
+  n_folds       <- 5L
+  fits_per_seed <- n_folds * 2L
+  total_fits    <- n_seeds * fits_per_seed
+  fit_count     <- 0L
+
+  run_one_seed <- function(seed) {
+    seed_cache <- here::here(sprintf("vignettes/stack_sens_seed_%d.rds", seed))
+    if (file.exists(seed_cache)) {
+      fit_count <<- fit_count + fits_per_seed
+      cat(sprintf("[%d/%d fits] seed %d loaded from cache\n", fit_count, total_fits, seed))
+      return(readRDS(seed_cache))
+    }
+
+    set.seed(seed)
+    split <- initial_split(analysis_tibble_wopv, prop = 0.75, strata = outcome)
+    train <- training(split)
+    test  <- testing(split)
+    folds <- vfold_cv(train, v = 5, strata = outcome)
+
+    xgb_wf_exp <- workflow() |>
+      add_recipe(lr_recipe_wopv) |>
+      add_model(stack_xgb_spec)
+
+    lr_res_exp <- fit_resamples(lr_workflow_wopv, resamples = folds,
+                                control = control_stack_resamples())
+    fit_count <<- fit_count + n_folds
+    cat(sprintf("[%d/%d fits] seed %d — LR resamples done\n", fit_count, total_fits, seed))
+
+    xgb_res_exp <- fit_resamples(xgb_wf_exp, resamples = folds,
+                                 control = control_stack_resamples())
+    fit_count <<- fit_count + n_folds
+    cat(sprintf("[%d/%d fits] seed %d — XGB resamples done\n", fit_count, total_fits, seed))
+
+    get_test_auc <- function(stack_data_obj) {
+      preds <- predict(fit_members(blend_predictions(stack_data_obj)),
+                       new_data = test, type = "prob") |>
+        bind_cols(test |> dplyr::select(outcome))
+      roc_auc(preds, truth = outcome, .pred_1, event_level = "second")$.estimate
+    }
+
+    auc_a <- get_test_auc(stacks() |> add_candidates(lr_res_exp) |> add_candidates(xgb_res_exp))
+    auc_b <- get_test_auc(stacks() |> add_candidates(xgb_res_exp))
+
+    result <- tibble(seed = seed, auc_lr_xgb = auc_a, auc_xgb_only = auc_b)
+    saveRDS(result, seed_cache)
+    result
+  }
+
+  sens_results <- map_dfr(seeds, run_one_seed)
+  saveRDS(sens_results, stack_experiment_cache)
+}
+
+# Paired t-test: pairing on seed controls for split-level variance,
+# isolating the effect of adding LR as a level-1 candidate.
+print(t.test(sens_results$auc_lr_xgb, sens_results$auc_xgb_only, paired = TRUE))
+cat(sprintf("Mean AUC difference (LR+XGB - XGB only): %.4f\n",
+            mean(sens_results$auc_lr_xgb) - mean(sens_results$auc_xgb_only)))
+
+sens_results |>
+  tidyr::pivot_longer(
+    cols      = c(auc_lr_xgb, auc_xgb_only),
+    names_to  = "condition",
+    values_to = "auc"
+  ) |>
+  mutate(condition = dplyr::recode(condition,
+    auc_lr_xgb   = "LR + XGB → LASSO",
+    auc_xgb_only = "XGB only → LASSO"
+  )) |>
+  ggplot(aes(x = auc, fill = condition)) +
+  geom_density(alpha = 0.5) +
+  geom_rug(aes(color = condition), alpha = 0.7) +
+  labs(
+    title    = "Seed sensitivity: LR+XGB→LASSO vs XGB→LASSO",
+    subtitle = sprintf("Paired t-test across %d seeds", nrow(sens_results)),
+    x = "Test ROC AUC", y = "Density",
+    fill = NULL, color = NULL
+  ) +
+  theme_minimal(base_size = 11) +
+  theme(legend.position = "top")
+
+
 # Look at Variable Importance ------
 # Permutation importance IS applicable — predict(stack_fit, ...) accepts raw
 # features and runs the full two-level ensemble internally. Commented out because
