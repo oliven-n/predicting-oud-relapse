@@ -82,8 +82,11 @@ run_one_seed <- function(seed) {
 sens_results <- map_dfr(seeds, run_one_seed)
 sens_results
 
-cat("\n--- Welch's t-test: LR+XGB vs XGB-only ---\n")
-print(t.test(sens_results$auc_lr_xgb, sens_results$auc_xgb_only))
+cat("\n--- Paired t-test: LR+XGB vs XGB-only ---\n")
+# Paired because both conditions use the same seed, same train/test split,
+# and the same XGB resamples — pairing removes seed-level variance and
+# isolates the effect of adding LR as a level-1 candidate.
+print(t.test(sens_results$auc_lr_xgb, sens_results$auc_xgb_only, paired = TRUE))
 
 cat(sprintf("Mean AUC difference (LR+XGB - XGB only): %.4f\n",
             mean(sens_results$auc_lr_xgb) - mean(sens_results$auc_xgb_only)))
