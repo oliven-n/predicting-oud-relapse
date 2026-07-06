@@ -240,9 +240,10 @@ relapse_pred_stack_test |>
 # ensemble's test ROC AUC relative to XGBoost alone?
 #
 # Method: vary the random seed (controls train/test split + CV fold assignment)
-# across 20 values. For each seed, build two stacks on a fresh 75/25 split:
-#   Condition A: LR + XGB → LASSO
-#   Condition B: XGB only → LASSO
+# across 20 values. For each seed, build two meta-learners on a fresh 75/25 split:
+#   Condition A: LR + XGB OOF predictions → LASSO  (via stacks)
+#   Condition B: XGB OOF predictions only → LASSO   (manual cv.glmnet — stacks
+#                                                     requires ≥2 candidates)
 # Both conditions share the same seed, same splits, and same XGB resamples,
 # so a paired t-test isolates the effect of adding LR.
 #
@@ -301,7 +302,24 @@ if (file.exists(stack_experiment_cache)) {
     }
 
     auc_a <- get_test_auc(stacks() |> add_candidates(lr_res_exp) |> add_candidates(xgb_res_exp))
-    auc_b <- get_test_auc(stacks() |> add_candidates(xgb_res_exp))
+
+    # Condition B: XGB OOF → LASSO manually (stacks requires ≥2 candidates to blend).
+    # cv.glmnet selects penalty on the OOF predictions; then XGB is refit on full
+    # training data, and the LASSO meta-learner is refit at that penalty on full-train
+    # XGB outputs — same two-stage structure stacks uses internally.
+    xgb_oof   <- collect_predictions(xgb_res_exp) |> dplyr::arrange(.row)
+    x_oof_b   <- matrix(xgb_oof$.pred_1, ncol = 1)
+    y_oof_b   <- as.integer(xgb_oof$outcome) - 1L
+    cv_b      <- glmnet::cv.glmnet(x_oof_b, y_oof_b, family = "binomial", alpha = 1)
+
+    xgb_fit_b  <- fit(xgb_wf_exp, data = train)
+    x_train_b  <- matrix(predict(xgb_fit_b, new_data = train, type = "prob")$.pred_1, ncol = 1)
+    x_test_b   <- matrix(predict(xgb_fit_b, new_data = test,  type = "prob")$.pred_1, ncol = 1)
+    lasso_b    <- glmnet::glmnet(x_train_b, as.integer(train$outcome) - 1L,
+                                 family = "binomial", alpha = 1, lambda = cv_b$lambda.min)
+    prob_b     <- as.vector(predict(lasso_b, x_test_b, type = "response"))
+    auc_b      <- roc_auc(tibble(.pred_1 = prob_b, outcome = test$outcome),
+                          truth = outcome, .pred_1, event_level = "second")$.estimate
 
     result <- tibble(seed = seed, auc_lr_xgb = auc_a, auc_xgb_only = auc_b)
     saveRDS(result, seed_cache)
