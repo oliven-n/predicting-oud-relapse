@@ -240,11 +240,15 @@ relapse_pred_stack_test |>
 # ensemble's test ROC AUC relative to XGBoost alone?
 #
 # Method: vary the random seed (controls train/test split + CV fold assignment)
-# across 20 values. For each seed, build two meta-learners on a fresh 75/25 split:
-#   Condition A: LR + XGB OOF predictions → LASSO  (via stacks)
-#   Condition B: XGB OOF predictions only → LASSO   (manual cv.glmnet — stacks
-#                                                     requires ≥2 candidates)
-# Both conditions share the same seed, same splits, and same XGB resamples,
+# across 20 values. For each seed, build two stacks on a fresh 75/25 split:
+#   Condition A: LR + a GRID of XGB candidates → LASSO
+#   Condition B:      the GRID of XGB candidates → LASSO
+# We feed a grid of XGB hyperparameter combos (not one fixed model) as level-1
+# candidates so the LASSO meta-learner has many columns to select among — this is
+# what stacks is designed for, and it makes Condition B a valid ≥2-candidate stack
+# (a single fixed XGB gives only 1 column, which stacks cannot blend). The grid
+# uses the SAME hyperparameter windows as xgboost.R's tuning grid.
+# Both conditions share the same seed, same splits, and same XGB candidates,
 # so a paired t-test isolates the effect of adding LR.
 #
 # Expected result: NOT significantly different (p > 0.05). XGBoost already
