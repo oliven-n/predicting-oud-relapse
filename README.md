@@ -1,4 +1,4 @@
-# ctn0094.oliven
+# predicting.oud.relapse
 
 **Predicting treatment response for people undergoing care for opioid use disorder (OUD)**
 
@@ -73,7 +73,7 @@ outcome, and engineered pre-treatment predictors). See `?analysis_tibble` for
 the column dictionary.
 
 ```r
-library(ctn0094.oliven)
+library(predicting.oud.relapse)
 data(analysis_tibble)
 ```
 
