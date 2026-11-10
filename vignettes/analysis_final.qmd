@@ -283,7 +283,7 @@ n_participants <- nrow(analysis_tibble)
 n_features     <- ncol(analysis_tibble) - 2L   # subtract who and project
 ```
 
-The analysis tibble contains **`r n_participants |> scales::comma()` participants** and **`r n_features` engineered feature columns** (excluding participant ID and study assignment), spanning substance-use history (per-drug days, binary use, longest streak), polydrug days, drug-use breadth, demographics, addiction severity (ASI), nicotine dependence (Fagerström), pain, psychiatric comorbidity, quality of life, housing stability, IV-use risk behavior, withdrawal severity, prescribed-medication adherence, study site, and cross-domain interactions. This matrix is shipped as the `analysis_tibble` dataset in the `ctn0094.oliven` package.
+The analysis tibble contains **`r n_participants |> scales::comma()` participants** and **`r n_features` engineered feature columns** (excluding participant ID and study assignment), spanning substance-use history (per-drug days, binary use, longest streak), polydrug days, drug-use breadth, demographics, addiction severity (ASI), nicotine dependence (Fagerström), pain, psychiatric comorbidity, quality of life, housing stability, IV-use risk behavior, withdrawal severity, prescribed-medication adherence, study site, and cross-domain interactions. This matrix is shipped as the `analysis_tibble` dataset in the `predicting.oud.relapse` package.
 
 ### Exclusion of Structurally Sparse Predictors
 
